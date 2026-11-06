@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Snake</title>
+<style>
+:root{--bg:#e8efe4;--board:#d3dfcc;--grid:#c6d4be;--snake:#1f3d2b;--head:#10281a;--fruit:#e4572e;--ink:#1c2b21;--muted:#5b6e60;--btn:#c3d2bb;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101a14;--board:#17261d;--grid:#1d3024;--snake:#8fd19e;--head:#c9f2d0;--fruit:#ff7a4d;--ink:#e3efe6;--muted:#8aa092;--btn:#223a2b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#101a14;--board:#17261d;--grid:#1d3024;--snake:#8fd19e;--head:#c9f2d0;--fruit:#ff7a4d;--ink:#e3efe6;--muted:#8aa092;--btn:#223a2b;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,"Times New Roman",serif;display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px;min-height:100vh;touch-action:manipulation}
+header{width:min(92vw,420px);display:flex;justify-content:space-between;align-items:baseline}
+h1{margin:0;font-size:1.6rem;letter-spacing:.01em}
+.scores{font-size:1rem;color:var(--muted)}
+.scores b{color:var(--ink);font-variant-numeric:tabular-nums}
+.wrap{position:relative;width:min(92vw,420px)}
+canvas{width:100%;aspect-ratio:1;display:block;background:var(--board);border-radius:10px;touch-action:none}
+.ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;background:color-mix(in srgb,var(--bg) 80%,transparent);border-radius:10px;padding:20px}
+.ov.hide{display:none}
+.ov h2{margin:0;font-size:1.5rem}
+.ov p{margin:0;color:var(--muted);max-width:28ch}
+button{font:inherit;color:var(--ink);background:var(--btn);border:0;border-radius:12px;padding:12px 22px;cursor:pointer}
+button.go{background:var(--fruit);color:#fff;font-weight:bold}
+.pad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,56px);gap:8px;justify-content:center}
+.pad button{padding:0;font-size:1.3rem}
+.pad .u{grid-column:2}
+.pad .l{grid-column:1;grid-row:2}.pad .d{grid-column:2;grid-row:2}.pad .r{grid-column:3;grid-row:2}
+</style>
+</head>
+<body>
+<header>
+  <h1>Snake</h1>
+  <div class="scores">Score <b id="sc">0</b> &nbsp; Best <b id="bs">0</b></div>
+</header>
+<div class="wrap">
+  <canvas id="c" width="400" height="400"></canvas>
+  <div class="ov" id="ov">
+    <h2 id="ot">Ready?</h2>
+    <p id="om">Swipe on the board, use the arrows below, or press the arrow keys.</p>
+    <button class="go" id="go">Play</button>
+  </div>
+</div>
+<div class="pad" aria-label="Controls">
+  <button class="u" data-d="u" aria-label="Up">▲</button>
+  <button class="l" data-d="l" aria-label="Left">◀</button>
+  <button class="d" data-d="d" aria-label="Down">▼</button>
+  <button class="r" data-d="r" aria-label="Right">▶</button>
+</div>
+<script>
+(function(){
+var N=20,S=20,cv=document.getElementById('c'),cx=cv.getContext('2d');
+var ov=document.getElementById('ov'),ot=document.getElementById('ot'),om=document.getElementById('om');
+var scEl=document.getElementById('sc'),bsEl=document.getElementById('bs');
+var V={u:[0,-1],d:[0,1],l:[-1,0],r:[1,0]},OPP={u:'d',d:'u',l:'r',r:'l'};
+var snake,dir,queue,fruit,score,timer,running=false,best=0;
+try{best=+localStorage.getItem('snake-best')||0}catch(e){}
+bsEl.textContent=best;
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function place(){
+  var f;
+  do{f={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)}}
+  while(snake.some(function(s){return s.x===f.x&&s.y===f.y}));
+  fruit=f;
+}
+function start(){
+  snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+  dir='r';queue=[];score=0;scEl.textContent=0;
+  place();running=true;ov.classList.add('hide');
+  clearInterval(timer);timer=setInterval(tick,Math.max(70,140-0));
+  draw();
+}
+function setSpeed(){
+  clearInterval(timer);
+  timer=setInterval(tick,Math.max(65,140-score*3));
+}
+function turn(d){
+  if(!running)return;
+  var last=queue.length?queue[queue.length-1]:dir;
+  if(d!==last&&d!==OPP[last]&&queue.length<2)queue.push(d);
+}
+function tick(){
+  if(queue.length)dir=queue.shift();
+  var h=snake[0],v=V[dir],n={x:h.x+v[0],y:h.y+v[1]};
+  if(n.x<0||n.y<0||n.x>=N||n.y>=N||snake.some(function(s){return s.x===n.x&&s.y===n.y}))return over();
+  snake.unshift(n);
+  if(n.x===fruit.x&&n.y===fruit.y){
+    score++;scEl.textContent=score;place();setSpeed();
+    if(navigator.vibrate)try{navigator.vibrate(15)}catch(e){}
+  }else snake.pop();
+  draw();
+}
+function over(){
+  running=false;clearInterval(timer);
+  if(score>best){
+    best=score;bsEl.textContent=best;
+    try{localStorage.setItem('snake-best',best)}catch(e){}
+  }
+  ot.textContent='Game over';
+  om.textContent='You scored '+score+'. Best is '+best+'.';
+  document.getElementById('go').textContent='Play again';
+  ov.classList.remove('hide');
+}
+function rr(x,y,w,h,r){cx.beginPath();cx.roundRect?cx.roundRect(x,y,w,h,r):cx.rect(x,y,w,h);cx.fill()}
+function draw(){
+  cx.clearRect(0,0,400,400);
+  cx.strokeStyle=css('--grid');cx.lineWidth=1;
+  for(var i=1;i<N;i++){cx.beginPath();cx.moveTo(i*S,0);cx.lineTo(i*S,400);cx.moveTo(0,i*S);cx.lineTo(400,i*S);cx.stroke()}
+  cx.fillStyle=css('--fruit');
+  cx.beginPath();cx.arc(fruit.x*S+S/2,fruit.y*S+S/2,S*.38,0,7);cx.fill();
+  snake.forEach(function(s,i){
+    cx.fillStyle=css(i?'--snake':'--head');
+    rr(s.x*S+1,s.y*S+1,S-2,S-2,i?5:8);
+  });
+}
+document.addEventListener('keydown',function(e){
+  var m={ArrowUp:'u',ArrowDown:'d',ArrowLeft:'l',ArrowRight:'r',w:'u',s:'d',a:'l',d:'r'}[e.key];
+  if(m){e.preventDefault();turn(m)}
+  else if((e.key===' '||e.key==='Enter')&&!running)start();
+});
+document.querySelectorAll('.pad button').forEach(function(b){
+  b.addEventListener('pointerdown',function(e){e.preventDefault();turn(b.dataset.d)});
+});
+var tx,ty;
+cv.addEventListener('touchstart',function(e){tx=e.touches[0].clientX;ty=e.touches[0].clientY},{passive:true});
+cv.addEventListener('touchmove',function(e){
+  if(tx==null)return;
+  var dx=e.touches[0].clientX-tx,dy=e.touches[0].clientY-ty;
+  if(Math.max(Math.abs(dx),Math.abs(dy))>24){
+    turn(Math.abs(dx)>Math.abs(dy)?(dx>0?'r':'l'):(dy>0?'d':'u'));
+    tx=e.touches[0].clientX;ty=e.touches[0].clientY;
+  }
+},{passive:true});
+cv.addEventListener('touchend',function(){tx=null});
+document.getElementById('go').addEventListener('click',start);
+snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];fruit={x:14,y:10};draw();
+})();
+</script>
+</body>
+</html>
